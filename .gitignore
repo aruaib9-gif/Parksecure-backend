@@ -48,3 +48,4 @@ yarn-error.log*
 # The original Base44 web frontend. Kept on disk while porting, excluded from
 # the deployed repo. Delete the directory once it is no longer needed.
 legacy-web/
+build-output/
