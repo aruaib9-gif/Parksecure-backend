@@ -127,13 +127,13 @@ android {
             keyPassword signingCredential('PARKSECURE_UPLOAD_KEY_PASSWORD') ?: 'android'
         }
     }
-    // Per-ABI APKs: a universal build carries native libs for all four
-    // architectures (~113MB). Splitting cuts each device APK to roughly a
-    // quarter of that, and universalApk keeps one any-device build for
-    // sideloading. Disable with -PparksecureAbiSplits=false.
+    // Off by default so `assembleRelease` produces a single, any-device APK.
+    // Turn on with -PparksecureAbiSplits=true to emit one APK per architecture
+    // (~43MB for arm64 vs ~108MB universal) when you care about download size.
+    // For the Play Store use `bundleRelease` instead — it splits automatically.
     splits {
         abi {
-            enable = (findProperty('parksecureAbiSplits') ?: 'true').toBoolean()
+            enable = (findProperty('parksecureAbiSplits') ?: 'false').toBoolean()
             reset()
             include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
             universalApk = true
