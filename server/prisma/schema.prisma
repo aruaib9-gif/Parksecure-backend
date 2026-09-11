@@ -1,0 +1,399 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  created_date         DateTime  @default(now())
+  updated_date         DateTime  @updatedAt
+  email                String    @unique
+  password_hash        String
+  full_name            String?
+  role                 String    @default("vehicle_owner") // super_admin | park_admin | facility_admin | security | vehicle_owner
+  assigned_facility_id String?
+  phone                String?
+  avatar_url           String?
+  is_active            Boolean   @default(true)
+  last_login           DateTime?
+
+  @@index([role])
+  @@index([assigned_facility_id])
+}
+
+model PushToken {
+  id           String   @id @default(cuid())
+  created_date DateTime @default(now())
+  user_email   String
+  token        String   @unique
+  platform     String?
+
+  @@index([user_email])
+}
+
+model Facility {
+  id                       String   @id @default(cuid())
+  created_date             DateTime @default(now())
+  updated_date             DateTime @updatedAt
+  name                     String
+  address                  String?
+  city                     String?
+  capacity                 Float?
+  billing_mode             String   @default("free") // free | standard | hourly
+  hourly_rate              Float?
+  standard_rate            Float?
+  subscription_monthly_fee Float    @default(0)
+  currency                 String   @default("NGN")
+  exit_timeout_minutes     Float    @default(15)
+  qr_deactivate_after_days Float    @default(0)
+  status                   String   @default("active") // active | inactive
+  logo_url                 String?
+  contact_phone            String?
+  contact_email            String?
+}
+
+model Vehicle {
+  id                  String    @id @default(cuid())
+  created_date        DateTime  @default(now())
+  updated_date        DateTime  @updatedAt
+  qr_code_id          String?
+  owner_name          String?
+  owner_phone         String?
+  owner_email         String?
+  owner_photo_url     String?
+  driver_name         String?
+  driver_phone        String?
+  plate_number        String
+  make_model          String?
+  color               String?
+  photo_front_url     String?
+  photo_back_url      String?
+  photo_side_url      String?
+  photo_url           String?
+  facility_id         String?
+  status              String    @default("active") // active | blacklisted | suspended
+  registration_type   String    @default("permanent") // permanent | guest
+  guest_pass_expires  DateTime?
+  guest_pass_notified Boolean   @default(false)
+  is_inside           Boolean   @default(false)
+  last_entry          DateTime?
+  last_exit           DateTime?
+  registered          Boolean   @default(false)
+  qr_requested        Boolean   @default(false)
+  qr_request_date     DateTime?
+  notes               String?
+
+  @@index([qr_code_id])
+  @@index([facility_id])
+  @@index([owner_email])
+  @@index([plate_number])
+}
+
+model QRCode {
+  id                   String   @id @default(cuid())
+  created_date         DateTime @default(now())
+  updated_date         DateTime @updatedAt
+  code_id              String   @unique
+  facility_id          String
+  batch_name           String?
+  code_type            String   @default("permanent") // permanent | guest
+  guest_duration_hours Float?
+  status               String   @default("available") // available | assigned | deactivated
+  vehicle_id           String?
+  generated_by         String?
+  qr_image_url         String?
+
+  @@index([facility_id])
+  @@index([status])
+}
+
+model ScanLog {
+  id                 String    @id @default(cuid())
+  created_date       DateTime  @default(now())
+  updated_date       DateTime  @updatedAt
+  vehicle_id         String?
+  qr_code_id         String
+  facility_id        String?
+  scan_type          String // entry | exit
+  scanned_by         String?
+  scanned_by_name    String?
+  plate_number       String?
+  owner_name         String?
+  driver_name        String?
+  driver_phone       String?
+  timestamp          DateTime  @default(now())
+  status             String    @default("completed") // completed | pending_approval | denied | timeout
+  items_declared     Json?
+  booth_photo_urls   Json?
+  security_confirmed Boolean   @default(false)
+  security_notes     String?
+  discrepancies      String?
+  notes              String?
+
+  @@index([vehicle_id])
+  @@index([facility_id])
+  @@index([scan_type])
+  @@index([created_date])
+}
+
+model ItemLog {
+  id               String   @id @default(cuid())
+  created_date     DateTime @default(now())
+  updated_date     DateTime @updatedAt
+  scan_log_id      String?
+  vehicle_id       String
+  facility_id      String?
+  plate_number     String?
+  owner_name       String?
+  driver_name      String?
+  scan_type        String // entry | exit
+  item_name        String
+  quantity         Float?
+  description      String?
+  photo_urls       Json?
+  verified_on_exit Boolean?
+  discrepancy_note String?
+  logged_by        String?
+
+  @@index([vehicle_id])
+  @@index([facility_id])
+  @@index([scan_log_id])
+}
+
+model ExitRequest {
+  id               String    @id @default(cuid())
+  created_date     DateTime  @default(now())
+  updated_date     DateTime  @updatedAt
+  vehicle_id       String
+  qr_code_id       String?
+  facility_id      String
+  owner_name       String?
+  owner_phone      String?
+  owner_email      String?
+  plate_number     String?
+  requested_by     String?
+  status           String    @default("pending") // pending | approved | rejected | timeout | escalated
+  responded_at     DateTime?
+  responded_by     String?
+  approval_token   String?   @unique
+  billing_amount   Float?
+  duration_minutes Float?
+  notes            String?
+
+  @@index([vehicle_id])
+  @@index([facility_id])
+  @@index([status])
+}
+
+model DriverPass {
+  id           String    @id @default(cuid())
+  created_date DateTime  @default(now())
+  updated_date DateTime  @updatedAt
+  vehicle_id   String
+  owner_id     String?
+  owner_email  String?
+  plate_number String?
+  driver_name  String?
+  driver_phone String?
+  pass_code    String    @unique
+  expires_at   DateTime?
+  status       String    @default("active") // active | expired | deactivated
+  notes        String?
+  last_used_at DateTime?
+  use_count    Float     @default(0)
+
+  @@index([vehicle_id])
+  @@index([owner_email])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  created_date    DateTime @default(now())
+  updated_date    DateTime @updatedAt
+  vehicle_id      String?
+  facility_id     String
+  exit_request_id String?
+  amount          Float
+  currency        String   @default("NGN")
+  billing_mode    String? // free | standard | hourly
+  duration_minutes Float?
+  status          String   @default("pending") // pending | paid | failed | waived
+  payment_method  String?
+  reference       String?
+  plate_number    String?
+  owner_name      String?
+  paid_at         DateTime?
+
+  @@index([facility_id])
+  @@index([status])
+  @@index([reference])
+}
+
+model SubscriptionPayment {
+  id                 String    @id @default(cuid())
+  created_date       DateTime  @default(now())
+  updated_date       DateTime  @updatedAt
+  facility_id        String
+  facility_name      String?
+  amount             Float
+  month              Float
+  year               Float
+  status             String    @default("pending") // pending | paid | failed | waived
+  paystack_reference String?
+  paid_at            DateTime?
+  email              String?
+  created_by         String?
+  notes              String?
+
+  @@index([facility_id])
+}
+
+model BillingItem {
+  id           String   @id @default(cuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  name         String
+  description  String?
+  amount       Float
+  category     String   @default("other")
+  facility_id  String?
+  is_active    Boolean  @default(true)
+  currency     String   @default("NGN")
+}
+
+model UserBill {
+  id                 String    @id @default(cuid())
+  created_date       DateTime  @default(now())
+  updated_date       DateTime  @updatedAt
+  billing_item_id    String?
+  vehicle_id         String?
+  facility_id        String
+  owner_name         String?
+  owner_email        String?
+  plate_number       String?
+  title              String
+  description        String?
+  category           String    @default("other")
+  amount             Float
+  currency           String    @default("NGN")
+  status             String    @default("pending") // pending | paid | waived | overdue
+  due_date           DateTime?
+  billing_month      Float?
+  billing_year       Float?
+  payment_method     String?
+  paystack_reference String?
+  paid_at            DateTime?
+  issued_by          String?
+  notes              String?
+
+  @@index([facility_id])
+  @@index([owner_email])
+  @@index([status])
+}
+
+model SecurityAlert {
+  id                  String    @id @default(cuid())
+  created_date        DateTime  @default(now())
+  updated_date        DateTime  @updatedAt
+  alert_type          String // item_discrepancy | overstay | blacklist_attempt | multiple_entry | guest_pass_expired
+  severity            String    @default("medium") // low | medium | high | critical
+  status              String    @default("open") // open | investigating | resolved | dismissed
+  facility_id         String?
+  facility_name       String?
+  vehicle_id          String?
+  plate_number        String?
+  owner_name          String?
+  driver_name         String?
+  scan_log_id         String?
+  title               String?
+  description         String?
+  discrepancy_details String?
+  overstay_hours      Float?
+  threshold_hours     Float?
+  resolved_by         String?
+  resolved_at         DateTime?
+  resolution_notes    String?
+  notified            Boolean   @default(false)
+
+  @@index([facility_id])
+  @@index([status])
+  @@index([alert_type])
+}
+
+model ShiftHandover {
+  id                 String    @id @default(cuid())
+  created_date       DateTime  @default(now())
+  updated_date       DateTime  @updatedAt
+  officer_name       String
+  officer_email      String?
+  facility_id        String
+  facility_name      String?
+  shift_start        DateTime?
+  shift_end          DateTime?
+  total_entries      Float?
+  total_exits        Float?
+  vehicles_inside    Float?
+  pending_exits      Float?
+  notes              String?
+  next_officer_name  String?
+  next_officer_email String?
+  status             String    @default("draft") // draft | sent
+  report_data        Json?
+
+  @@index([facility_id])
+}
+
+model NotificationSettings {
+  id                        String   @id @default(cuid())
+  created_date              DateTime @default(now())
+  updated_date              DateTime @updatedAt
+  facility_id               String?
+  user_id                   String?
+  user_email                String?
+  notify_email              Boolean  @default(true)
+  notify_inapp              Boolean  @default(true)
+  notify_whatsapp           Boolean  @default(false)
+  whatsapp_number           String?
+  notify_on_entry           Boolean  @default(true)
+  notify_on_exit_request    Boolean  @default(true)
+  notify_on_guest_expiry    Boolean  @default(true)
+  notify_on_blacklist       Boolean  @default(true)
+  security_override_enabled Boolean  @default(false)
+  security_override_roles   Json?
+  guest_pass_alert_minutes  Float    @default(30)
+
+  @@index([user_email])
+  @@index([facility_id])
+}
+
+model LegalDocument {
+  id            String   @id @default(cuid())
+  created_date  DateTime @default(now())
+  updated_date  DateTime @updatedAt
+  document_type String // privacy_policy | terms_of_service
+  title         String
+  content       String
+  version       String?
+  is_active     Boolean  @default(true)
+  updated_by    String?
+  notes         String?
+
+  @@index([document_type])
+}
+
+model AppConfig {
+  id           String   @id @default(cuid())
+  created_date DateTime @default(now())
+  updated_date DateTime @updatedAt
+  key          String   @unique
+  value        String?
+  value_json   Json?
+  label        String?
+  description  String?
+  category     String   @default("general")
+  updated_by   String?
+}

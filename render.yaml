@@ -1,0 +1,54 @@
+# Render Blueprint — deploy with "New +" -> "Blueprint" at https://dashboard.render.com
+# Creates the ParkSecure API web service and its PostgreSQL database.
+services:
+  - type: web
+    name: parksecure-api
+    runtime: node
+    plan: starter # upgrade as needed; "free" also works but spins down when idle
+    rootDir: server
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm run seed && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: parksecure-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_BASE_URL
+        value: https://parksecure-api.onrender.com # update after Render assigns your URL
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ADMIN_EMAIL
+        sync: false # set in dashboard
+      - key: ADMIN_PASSWORD
+        sync: false # set in dashboard
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: ParkSecure <no-reply@parksecure.app>
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PLATE_RECOGNIZER_TOKEN
+        sync: false
+    # NOTE: uploads/ is ephemeral on Render. For persistent vehicle photos either
+    # attach a Render Disk (paid) here, or use an object store:
+    # disk:
+    #   name: parksecure-uploads
+    #   mountPath: /opt/render/project/src/server/uploads
+    #   sizeGB: 5
+
+databases:
+  - name: parksecure-db
+    plan: basic-256mb # or "free" for testing
+    databaseName: parksecure
+    user: parksecure

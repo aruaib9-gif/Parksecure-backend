@@ -1,0 +1,51 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.keystore
+!android/app/debug.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Release signing — the keystore and its passwords must never be committed.
+credentials/*.keystore
+android/keystore.properties
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders — android/ is intentionally tracked because it carries
+# the release signing config (see credentials/README.md). Build outputs are excluded below.
+/ios
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
