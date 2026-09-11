@@ -127,16 +127,21 @@ android {
             keyPassword signingCredential('PARKSECURE_UPLOAD_KEY_PASSWORD') ?: 'android'
         }
     }
-    // Off by default so `assembleRelease` produces a single, any-device APK.
-    // Turn on with -PparksecureAbiSplits=true to emit one APK per architecture
-    // (~43MB for arm64 vs ~108MB universal) when you care about download size.
-    // For the Play Store use `bundleRelease` instead — it splits automatically.
+    // A release build produces ONE ~43MB APK for arm64-v8a, which covers every
+    // 64-bit Android phone (essentially all devices from 2017 on). A universal
+    // APK carrying all four architectures is ~108MB, most of it dead weight.
+    //
+    // arm64 will NOT install on an x86_64 emulator. To test there, or to build
+    // an any-device APK, pass a different ABI list:
+    //   ./gradlew assembleRelease -PparksecureAbis=x86_64
+    //   ./gradlew assembleRelease -PparksecureAbis=armeabi-v7a,arm64-v8a,x86,x86_64 -PparksecureUniversalApk=true
+    // For the Play Store use `bundleRelease` — it splits per device automatically.
     splits {
         abi {
-            enable = (findProperty('parksecureAbiSplits') ?: 'false').toBoolean()
+            enable = true
             reset()
-            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-            universalApk = true
+            include((findProperty('parksecureAbis') ?: 'arm64-v8a').split(',').collect { it.trim() } as String[])
+            universalApk = (findProperty('parksecureUniversalApk') ?: 'false').toBoolean()
         }
     }
 
