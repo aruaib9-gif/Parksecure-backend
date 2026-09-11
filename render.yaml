@@ -6,8 +6,10 @@ services:
     runtime: node
     plan: starter # upgrade as needed; "free" also works but spins down when idle
     rootDir: server
-    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
-    startCommand: npm run seed && npm start
+    # Migrations and the idempotent seed run at build time: a failure then fails
+    # the deploy cleanly, instead of crash-looping the service on every boot.
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run seed
+    startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
