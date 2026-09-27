@@ -136,9 +136,9 @@ router.post('/sendInviteEmail', requireRole(...STAFF), async (req, res, next) =>
         sent: false,
         reason: result.reason,
         error:
-          result.reason === 'smtp_not_configured'
-            ? 'Email is not configured on this server. Set SMTP_HOST, SMTP_USER and SMTP_PASS, then redeploy.'
-            : 'The invite email could not be sent.',
+          result.reason === 'email_not_configured'
+            ? 'Email is not configured on this server. Set RESEND_API_KEY (or SMTP_HOST/USER/PASS), then redeploy.'
+            : result.error || 'The invite email could not be sent.',
       });
     }
     res.json({ success: true, sent: true });

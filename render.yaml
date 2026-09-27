@@ -28,6 +28,12 @@ services:
         sync: false # set in dashboard
       - key: ADMIN_PASSWORD
         sync: false # set in dashboard
+      # Email: Resend (HTTPS API) is preferred — hosted platforms often block
+      # outbound SMTP ports. Set RESEND_API_KEY and leave the SMTP_* vars empty.
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false # set in dashboard
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

@@ -18,6 +18,9 @@ module.exports = {
   corsOrigins: (process.env.CORS_ORIGINS || '*').split(',').map((s) => s.trim()),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '10', 10),
+  // Email transport: 'resend' | 'smtp' | 'console'. Auto-detected when unset.
+  emailProvider: process.env.EMAIL_PROVIDER || '',
+  resendApiKey: process.env.RESEND_API_KEY || '',
   smtp: {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587', 10),
