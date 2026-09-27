@@ -141,7 +141,8 @@ router.post('/sendInviteEmail', requireRole(...STAFF), async (req, res, next) =>
             : result.error || 'The invite email could not be sent.',
       });
     }
-    res.json({ success: true, sent: true });
+    // messageId lets a delivery be traced in the provider dashboard.
+    res.json({ success: true, sent: true, provider: result.provider, messageId: result.messageId });
   } catch (err) {
     next(err);
   }
