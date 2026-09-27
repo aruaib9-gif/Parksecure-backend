@@ -510,6 +510,37 @@ describe('exit approval workflow', () => {
   });
 });
 
+describe('notification delivery reporting', () => {
+  test('an invite is never reported as sent when SMTP is unconfigured', async () => {
+    // The test environment has no SMTP_HOST, so nothing can actually be sent.
+    const res = await api('/api/functions/sendInviteEmail', {
+      method: 'POST',
+      token: adminToken,
+      body: { email: `invitee-${TAG}@test.local`, full_name: 'Invitee', plate_number: 'INV-001' },
+    });
+    if (res.status === 200) {
+      // Only acceptable if SMTP really is configured for this run.
+      assert.equal(res.body.sent, true, 'a 200 must mean the mail was actually sent');
+    } else {
+      assert.equal(res.status, 503);
+      assert.equal(res.body.success, false, 'must not claim success');
+      assert.equal(res.body.sent, false);
+      assert.ok(res.body.error, 'must explain why nothing was sent');
+    }
+  });
+
+  test('a push to a user with no device does not report success', async () => {
+    const res = await api('/api/functions/sendPushNotification', {
+      method: 'POST',
+      token: adminToken,
+      body: { email: `nodevice-${TAG}@test.local`, title: 'Hello', body: 'Test' },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.sent, 0);
+    assert.equal(res.body.success, false, 'zero devices reached is not a success');
+  });
+});
+
 describe('dashboard statistics', () => {
   test('dashboard reflects a vehicle currently inside', async () => {
     const { code, facility } = await createScannableVehicle();

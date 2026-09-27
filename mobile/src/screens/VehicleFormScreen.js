@@ -76,8 +76,13 @@ export default function VehicleFormScreen({ navigation, route }) {
         full_name: form.owner_name,
         plate_number: form.plate_number,
       }),
-    onSuccess: () => Alert.alert('Invite sent', `An invite email was sent to ${form.owner_email}.`),
-    onError: (err) => Alert.alert('Invite failed', err.message),
+    // Only claim the invite went out when the server confirms it did; a 503
+    // with reason smtp_not_configured lands in onError with a usable message.
+    onSuccess: (res) =>
+      res?.sent
+        ? Alert.alert('Invite sent', `An invite email was sent to ${form.owner_email}.`)
+        : Alert.alert('Invite not sent', res?.error || 'The server did not send the invite email.'),
+    onError: (err) => Alert.alert('Invite not sent', err.message),
   });
 
   const remove = useMutation({

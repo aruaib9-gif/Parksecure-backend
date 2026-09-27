@@ -99,7 +99,12 @@ router.post('/sendPushNotification', requireRole(...STAFF), async (req, res, nex
     const target = email || ownerEmail;
     if (!target || !title) throw new HttpError(400, 'email and title are required');
     const result = await sendPushToEmails([target], { title, body: body || '', data });
-    res.json({ success: true, ...result });
+    // sent is a device count: zero means the user has no registered device.
+    res.json({
+      success: result.sent > 0,
+      ...result,
+      ...(result.sent === 0 ? { reason: 'no_registered_devices' } : {}),
+    });
   } catch (err) {
     next(err);
   }
@@ -123,7 +128,20 @@ router.post('/sendInviteEmail', requireRole(...STAFF), async (req, res, next) =>
         <p style="color:#6b7280;font-size:12px">ParkSecure Vehicle Security</p>
       </div>`,
     });
-    res.json({ success: true, ...result });
+    if (!result.sent) {
+      // Reporting "sent" when nothing left the server hides a misconfiguration
+      // from the operator and misleads the person expecting the invite.
+      return res.status(503).json({
+        success: false,
+        sent: false,
+        reason: result.reason,
+        error:
+          result.reason === 'smtp_not_configured'
+            ? 'Email is not configured on this server. Set SMTP_HOST, SMTP_USER and SMTP_PASS, then redeploy.'
+            : 'The invite email could not be sent.',
+      });
+    }
+    res.json({ success: true, sent: true });
   } catch (err) {
     next(err);
   }
