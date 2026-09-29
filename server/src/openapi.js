@@ -394,15 +394,39 @@ function buildOpenApiSpec(baseUrl) {
     '/api/functions/generateQRBatch': {
       post: {
         tags: ['Functions'], summary: 'Generate a sequential batch of QR codes',
-        requestBody: { required: true, ...json(obj({ facility_id: str, batch_name: str, count: { ...num, maximum: 500 }, prefix: { ...str, default: 'PSK' }, code_type: { ...str, enum: ['permanent', 'guest'] }, guest_duration_hours: num }, ['facility_id', 'count'])) },
+        description: 'Codes are numbered <PREFIX>-0001 upward, continuing from the highest existing code with that prefix. When `prefix` is omitted it is abbreviated from the facility name — "Dominion City Church Ikeja" becomes DCCI.',
+        requestBody: { required: true, ...json(obj({ facility_id: str, batch_name: str, count: { ...num, maximum: 500 }, prefix: { ...str, description: 'Optional. Defaults to an abbreviation of the facility name.' }, code_type: { ...str, enum: ['permanent', 'guest'] }, guest_duration_hours: num }, ['facility_id', 'count'])) },
         responses: { 201: { description: 'Created QR codes', ...json({ type: 'array', items: { $ref: '#/components/schemas/QRCode' } }) } },
+      },
+    },
+    '/api/functions/qrCodeStatus': {
+      get: {
+        tags: ['Functions'], summary: 'Check whether a scanned QR code is free to assign',
+        description: 'Read-only precursor to assignQRCode. Returns `assignable` plus a human-readable `message`; `result` is one of unknown_code, available, already_assigned, assigned_orphaned, deactivated.',
+        parameters: [{ name: 'code_id', in: 'query', required: true, schema: str, example: 'DCCI-0001' }],
+        responses: {
+          200: {
+            description: 'Assignment status',
+            ...json(obj({
+              code_id: str, exists: bool, assignable: bool, result: str, message: str,
+              status: str, code_type: str, batch_name: str,
+              facility: obj({ id: str, name: str }),
+              vehicle: obj({ id: str, plate_number: str, owner_name: str, owner_email: str }),
+            })),
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+        },
       },
     },
     '/api/functions/assignQRCode': {
       post: {
         tags: ['Functions'], summary: 'Assign an available QR code to a vehicle',
         requestBody: { required: true, ...json(obj({ vehicle_id: str, code_id: str }, ['vehicle_id', 'code_id'])) },
-        responses: { 200: { description: 'Assignment result', ...json(obj({ qr_code: { $ref: '#/components/schemas/QRCode' }, vehicle: { $ref: '#/components/schemas/Vehicle' } })) } },
+        responses: {
+          200: { description: 'Assignment result', ...json(obj({ qr_code: { $ref: '#/components/schemas/QRCode' }, vehicle: { $ref: '#/components/schemas/Vehicle' } })) },
+          404: { $ref: '#/components/responses/NotFound' },
+          409: { description: 'Code is deactivated, or already held by another vehicle', ...json({ $ref: '#/components/schemas/Error' }) },
+        },
       },
     },
     '/api/functions/detectSecurityAlerts': {

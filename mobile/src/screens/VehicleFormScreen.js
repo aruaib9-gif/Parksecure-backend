@@ -3,6 +3,7 @@ import { View, Text, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { entities, functions } from '../api/client';
 import { Screen, Card, Button, Input, Select, SectionTitle, KeyValue } from '../components/ui';
+import QRAssign from '../components/QRAssign';
 import { spacing } from '../lib/theme';
 
 const STATUS_OPTIONS = [
@@ -35,7 +36,6 @@ export default function VehicleFormScreen({ navigation, route }) {
     status: vehicle?.status || 'active',
     registration_type: vehicle?.registration_type || 'permanent',
   });
-  const [qrInput, setQrInput] = useState('');
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -55,18 +55,6 @@ export default function VehicleFormScreen({ navigation, route }) {
       ]);
     },
     onError: (err) => Alert.alert('Save failed', err.message),
-  });
-
-  const assignQR = useMutation({
-    mutationFn: (code) => functions.assignQRCode(vehicle.id, code),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
-      queryClient.invalidateQueries({ queryKey: ['qrcodes'] });
-      Alert.alert('QR assigned', `Code ${qrInput.trim()} assigned to ${form.plate_number}.`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    },
-    onError: (err) => Alert.alert('Assign failed', err.message),
   });
 
   const invite = useMutation({
@@ -185,24 +173,7 @@ export default function VehicleFormScreen({ navigation, route }) {
             {vehicle.qr_code_id ? (
               <KeyValue label="Assigned code" value={vehicle.qr_code_id} />
             ) : (
-              <>
-                <Input
-                  label="QR Code ID"
-                  placeholder="Enter a code to assign"
-                  value={qrInput}
-                  onChangeText={setQrInput}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                />
-                <Button
-                  title="Assign QR"
-                  icon="qr-code-outline"
-                  variant="secondary"
-                  disabled={!qrInput.trim()}
-                  loading={assignQR.isPending}
-                  onPress={() => assignQR.mutate(qrInput.trim())}
-                />
-              </>
+              <QRAssign vehicle={vehicle} onAssigned={() => navigation.goBack()} />
             )}
           </Card>
 

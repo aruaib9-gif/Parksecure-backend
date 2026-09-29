@@ -6,6 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { entities, functions } from '../api/client';
 import { Screen, Card, Button, Badge, Input, Select, Row, EmptyState, Loading, SectionTitle } from '../components/ui';
 import { colors, spacing } from '../lib/theme';
+import { facilityPrefix, normalizePrefix } from '../lib/qrPrefix';
 
 const CODE_TYPE_OPTIONS = [
   { value: 'permanent', label: 'Permanent' },
@@ -20,6 +21,7 @@ export default function QRCodesScreen() {
     facility_id: '',
     batch_name: '',
     count: '',
+    prefix: '',
     code_type: 'permanent',
     guest_duration_hours: '24',
   });
@@ -66,7 +68,7 @@ export default function QRCodesScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qrcodes'] });
       setShowForm(false);
-      setForm({ facility_id: '', batch_name: '', count: '', code_type: 'permanent', guest_duration_hours: '24' });
+      setForm({ facility_id: '', batch_name: '', count: '', prefix: '', code_type: 'permanent', guest_duration_hours: '24' });
       Alert.alert('Batch generated', 'The QR code batch was created.');
     },
     onError: (err) => Alert.alert('Generation failed', err.message),
@@ -88,6 +90,7 @@ export default function QRCodesScreen() {
       batch_name: form.batch_name.trim(),
       count,
       code_type: form.code_type,
+      ...(form.prefix ? { prefix: form.prefix } : {}),
     };
     if (form.code_type === 'guest') {
       payload.guest_duration_hours = parseInt(form.guest_duration_hours, 10) || 24;
@@ -127,7 +130,11 @@ export default function QRCodesScreen() {
             label="Facility"
             value={form.facility_id}
             options={facilityOptions}
-            onChange={(v) => set('facility_id', v)}
+            onChange={(v) =>
+              // Prefill the prefix from the facility's initials; the user can
+              // still override it before generating.
+              setForm((f) => ({ ...f, facility_id: v, prefix: facilityPrefix(facilityName(v), '') }))
+            }
             placeholder="Select facility..."
           />
           <Input
@@ -136,6 +143,19 @@ export default function QRCodesScreen() {
             value={form.batch_name}
             onChangeText={(v) => set('batch_name', v)}
           />
+          <Input
+            label="Code Prefix"
+            placeholder="e.g. DCCI"
+            value={form.prefix}
+            onChangeText={(v) => set('prefix', normalizePrefix(v))}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+          <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md }}>
+            {form.prefix
+              ? `Codes will read ${form.prefix}-0001, ${form.prefix}-0002 …`
+              : 'Defaults to the facility initials, e.g. Dominion City Church Ikeja → DCCI.'}
+          </Text>
           <Input
             label="Count (max 500)"
             placeholder="e.g. 100"

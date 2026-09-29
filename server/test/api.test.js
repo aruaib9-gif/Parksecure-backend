@@ -19,6 +19,7 @@ const assert = require('node:assert/strict');
 const app = require('../src/app');
 const prisma = require('../src/db');
 const { computeBilling, durationText } = require('../src/services/billing');
+const { facilityPrefix, normalizePrefix } = require('../src/services/qrcodes');
 
 // Credentials come from the environment (server/.env) so no real password is
 // ever committed. Seed the admin with `npm run seed` before running the suite.
@@ -309,6 +310,110 @@ describe('QR code lifecycle', () => {
     const res = await api(`/api/scans/lookup?code=NOPE-${TAG}`, { token: adminToken });
     assert.equal(res.status, 200);
     assert.notEqual(res.body.result, 'ok');
+  });
+});
+
+describe('QR code prefixes and assignment checks', () => {
+  test('a facility name abbreviates to its initials', () => {
+    assert.equal(facilityPrefix('Dominion City Church Ikeja'), 'DCCI');
+    assert.equal(facilityPrefix('Ikeja City Mall'), 'ICM');
+    assert.equal(facilityPrefix('Redeemed Christian Church of God Lagos'), 'RCCGL');
+  });
+
+  test('names too short to abbreviate fall back to leading letters', () => {
+    assert.equal(facilityPrefix('Lekki'), 'LEKK');
+    assert.equal(facilityPrefix('Victoria Island'), 'VICT');
+  });
+
+  test('unusable names fall back rather than producing an empty prefix', () => {
+    assert.equal(facilityPrefix(''), 'PSK');
+    assert.equal(facilityPrefix('!!!'), 'PSK');
+    assert.equal(normalizePrefix('dcci-'), 'DCCI');
+  });
+
+  test('a generated batch takes its prefix from the facility name', async () => {
+    const facility = await createFacility({ name: `${TAG} Dominion City Church Ikeja` });
+    const batch = await api('/api/functions/generateQRBatch', {
+      method: 'POST',
+      token: adminToken,
+      body: { facility_id: facility.id, count: 2, batch_name: `${TAG} auto` },
+    });
+    assert.equal(batch.status, 201);
+    // The TAG prefixes the name, so initials start with T; the point is that the
+    // code is derived from the name rather than the old hardcoded PSK.
+    assert.ok(!batch.body[0].code_id.startsWith('PSK-'), 'must not fall back to PSK');
+    assert.match(batch.body[0].code_id, /^[A-Z0-9]{1,5}-0*1$/);
+    assert.match(batch.body[1].code_id, /-0*2$/, 'codes must run sequentially');
+  });
+
+  test('an explicit prefix overrides the derived one', async () => {
+    const facility = await createFacility();
+    const batch = await api('/api/functions/generateQRBatch', {
+      method: 'POST',
+      token: adminToken,
+      body: { facility_id: facility.id, count: 1, batch_name: `${TAG} explicit`, prefix: 'zz9' },
+    });
+    assert.equal(batch.status, 201);
+    assert.match(batch.body[0].code_id, /^ZZ9-/, 'prefix is normalised to uppercase');
+  });
+
+  test('an unknown code reports that it is not in the system', async () => {
+    const res = await api(`/api/functions/qrCodeStatus?code_id=NOPE-${TAG}`, { token: adminToken });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.exists, false);
+    assert.equal(res.body.assignable, false);
+    assert.equal(res.body.result, 'unknown_code');
+  });
+
+  test('a fresh code reports as available', async () => {
+    const facility = await createFacility();
+    const batch = await api('/api/functions/generateQRBatch', {
+      method: 'POST',
+      token: adminToken,
+      body: { facility_id: facility.id, count: 1, batch_name: `${TAG} free`, prefix: 'FREE' },
+    });
+    const res = await api(`/api/functions/qrCodeStatus?code_id=${batch.body[0].code_id}`, { token: adminToken });
+    assert.equal(res.body.exists, true);
+    assert.equal(res.body.assignable, true);
+    assert.equal(res.body.result, 'available');
+  });
+
+  test('an assigned code names the vehicle holding it', async () => {
+    const { code, vehicle } = await createScannableVehicle();
+    const res = await api(`/api/functions/qrCodeStatus?code_id=${code}`, { token: adminToken });
+    assert.equal(res.body.result, 'already_assigned');
+    assert.equal(res.body.assignable, false);
+    assert.equal(res.body.vehicle.plate_number, vehicle.plate_number);
+    assert.match(res.body.message, new RegExp(vehicle.plate_number));
+  });
+
+  test('reassigning a held code is refused and names the holder', async () => {
+    const { code, vehicle, facility } = await createScannableVehicle();
+    const other = await api('/api/entities/Vehicle', {
+      method: 'POST',
+      token: adminToken,
+      body: { plate_number: `OTH-${TAG.slice(0, 4)}`, facility_id: facility.id, owner_name: 'Other' },
+    });
+    const res = await api('/api/functions/assignQRCode', {
+      method: 'POST',
+      token: adminToken,
+      body: { vehicle_id: other.body.id, code_id: code },
+    });
+    assert.equal(res.status, 409);
+    assert.match(res.body.error, new RegExp(vehicle.plate_number));
+  });
+
+  test('available codes can be listed for a facility to pick from', async () => {
+    const facility = await createFacility();
+    await api('/api/functions/generateQRBatch', {
+      method: 'POST',
+      token: adminToken,
+      body: { facility_id: facility.id, count: 3, batch_name: `${TAG} pool`, prefix: 'POOL' },
+    });
+    const res = await api(`/api/entities/QRCode?facility_id=${facility.id}&status=available`, { token: adminToken });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.length, 3);
+    assert.ok(res.body.every((c) => c.status === 'available'));
   });
 });
 

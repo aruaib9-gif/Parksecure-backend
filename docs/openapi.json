@@ -8151,6 +8151,7 @@
           "Functions"
         ],
         "summary": "Generate a sequential batch of QR codes",
+        "description": "Codes are numbered <PREFIX>-0001 upward, continuing from the highest existing code with that prefix. When `prefix` is omitted it is abbreviated from the facility name — \"Dominion City Church Ikeja\" becomes DCCI.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8170,7 +8171,7 @@
                   },
                   "prefix": {
                     "type": "string",
-                    "default": "PSK"
+                    "description": "Optional. Defaults to an abbreviation of the facility name."
                   },
                   "code_type": {
                     "type": "string",
@@ -8204,6 +8205,98 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/functions/qrCodeStatus": {
+      "get": {
+        "tags": [
+          "Functions"
+        ],
+        "summary": "Check whether a scanned QR code is free to assign",
+        "description": "Read-only precursor to assignQRCode. Returns `assignable` plus a human-readable `message`; `result` is one of unknown_code, available, already_assigned, assigned_orphaned, deactivated.",
+        "parameters": [
+          {
+            "name": "code_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "DCCI-0001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Assignment status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code_id": {
+                      "type": "string"
+                    },
+                    "exists": {
+                      "type": "boolean"
+                    },
+                    "assignable": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "code_type": {
+                      "type": "string"
+                    },
+                    "batch_name": {
+                      "type": "string"
+                    },
+                    "facility": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "vehicle": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "plate_number": {
+                          "type": "string"
+                        },
+                        "owner_name": {
+                          "type": "string"
+                        },
+                        "owner_email": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -8260,6 +8353,19 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Code is deactivated, or already held by another vehicle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }

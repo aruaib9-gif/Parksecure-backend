@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../db');
 const config = require('../config');
 const { authenticate, requireRole, HttpError } = require('../middleware/auth');
+const { facilityPrefix, normalizePrefix } = require('../services/qrcodes');
 const { sendEmail } = require('../services/email');
 const { sendPushToEmails } = require('../services/push');
 const { runSecurityDetection } = require('../jobs/securityAlerts');
@@ -16,10 +17,18 @@ router.use(authenticate);
 // POST /api/functions/generateQRBatch { facility_id, batch_name, count, prefix?, code_type?, guest_duration_hours? }
 router.post('/generateQRBatch', requireRole(...STAFF), async (req, res, next) => {
   try {
-    const { facility_id, batch_name, count, prefix = 'PSK', code_type = 'permanent', guest_duration_hours } = req.body || {};
+    const { facility_id, batch_name, count, code_type = 'permanent', guest_duration_hours } = req.body || {};
     if (!facility_id) throw new HttpError(400, 'facility_id is required');
     const n = parseInt(count, 10);
     if (!n || n < 1 || n > 500) throw new HttpError(400, 'count must be between 1 and 500');
+
+    const facility = await prisma.facility.findUnique({ where: { id: facility_id } });
+    if (!facility) throw new HttpError(404, 'Facility not found');
+    // An explicit prefix wins; otherwise abbreviate the facility name so a
+    // printed sticker identifies its site (Dominion City Church Ikeja -> DCCI).
+    const prefix = req.body?.prefix
+      ? normalizePrefix(req.body.prefix)
+      : facilityPrefix(facility.name);
 
     // Continue sequence from the highest existing code with this prefix.
     const last = await prisma.qRCode.findFirst({
@@ -46,6 +55,76 @@ router.post('/generateQRBatch', requireRole(...STAFF), async (req, res, next) =>
   }
 });
 
+// Check a scanned QR code before assigning it: does it exist, and is it already
+// on a vehicle? Staff scan a physical sticker and need to know immediately
+// whether it is free, so this is a read-only precursor to assignQRCode.
+// GET /api/functions/qrCodeStatus?code_id=DCCI-0001
+router.get('/qrCodeStatus', requireRole(...STAFF), async (req, res, next) => {
+  try {
+    const codeId = String(req.query.code_id || '').trim();
+    if (!codeId) throw new HttpError(400, 'code_id is required');
+
+    const qr = await prisma.qRCode.findUnique({ where: { code_id: codeId } });
+    if (!qr) {
+      return res.json({
+        code_id: codeId,
+        exists: false,
+        assignable: false,
+        result: 'unknown_code',
+        message: 'This code is not in the system. Generate a batch that includes it first.',
+      });
+    }
+
+    // A code can be marked assigned, and separately a vehicle can point at it;
+    // report the vehicle whenever one exists so stale state is still visible.
+    const vehicle = await prisma.vehicle.findFirst({ where: { qr_code_id: codeId } });
+    const facility = qr.facility_id
+      ? await prisma.facility.findUnique({ where: { id: qr.facility_id } })
+      : null;
+
+    let result = 'available';
+    let message = 'This code is available to assign.';
+    let assignable = true;
+
+    if (qr.status === 'deactivated') {
+      result = 'deactivated';
+      assignable = false;
+      message = 'This code has been deactivated and cannot be assigned.';
+    } else if (vehicle) {
+      result = 'already_assigned';
+      assignable = false;
+      message = `Already assigned to ${vehicle.plate_number}${vehicle.owner_name ? ` (${vehicle.owner_name})` : ''}.`;
+    } else if (qr.status === 'assigned') {
+      // Marked assigned with no vehicle pointing at it — the vehicle was deleted.
+      result = 'assigned_orphaned';
+      assignable = true;
+      message = 'Marked assigned but no vehicle holds it; it can be reassigned.';
+    }
+
+    res.json({
+      code_id: codeId,
+      exists: true,
+      assignable,
+      result,
+      message,
+      status: qr.status,
+      code_type: qr.code_type,
+      batch_name: qr.batch_name,
+      facility: facility ? { id: facility.id, name: facility.name } : null,
+      vehicle: vehicle
+        ? {
+            id: vehicle.id,
+            plate_number: vehicle.plate_number,
+            owner_name: vehicle.owner_name,
+            owner_email: vehicle.owner_email,
+          }
+        : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Assign an available QR code to a vehicle.
 router.post('/assignQRCode', requireRole(...STAFF), async (req, res, next) => {
   try {
@@ -53,7 +132,17 @@ router.post('/assignQRCode', requireRole(...STAFF), async (req, res, next) => {
     if (!vehicle_id || !code_id) throw new HttpError(400, 'vehicle_id and code_id are required');
     const qr = await prisma.qRCode.findUnique({ where: { code_id } });
     if (!qr) throw new HttpError(404, 'QR code not found');
-    if (qr.status !== 'available') throw new HttpError(409, `QR code is ${qr.status}`);
+    if (qr.status === 'deactivated') throw new HttpError(409, 'This QR code has been deactivated and cannot be assigned.');
+
+    // Name the holder rather than saying "assigned": staff scanning a sticker
+    // need to know which vehicle already has it.
+    const holder = await prisma.vehicle.findFirst({ where: { qr_code_id: code_id } });
+    if (holder && holder.id !== vehicle_id) {
+      throw new HttpError(
+        409,
+        `This QR code is already assigned to ${holder.plate_number}${holder.owner_name ? ` (${holder.owner_name})` : ''}.`
+      );
+    }
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicle_id } });
     if (!vehicle) throw new HttpError(404, 'Vehicle not found');
 

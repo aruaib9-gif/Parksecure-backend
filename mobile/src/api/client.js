@@ -180,6 +180,7 @@ export const functions = {
   generateQRBatch: (payload) => request('/api/functions/generateQRBatch', { method: 'POST', body: payload }),
   assignQRCode: (vehicle_id, code_id) =>
     request('/api/functions/assignQRCode', { method: 'POST', body: { vehicle_id, code_id } }),
+  qrCodeStatus: (code_id) => request('/api/functions/qrCodeStatus', { params: { code_id } }),
   detectSecurityAlerts: () => request('/api/functions/detectSecurityAlerts', { method: 'POST' }),
   sendPushNotification: (payload) => request('/api/functions/sendPushNotification', { method: 'POST', body: payload }),
   sendInviteEmail: (payload) => request('/api/functions/sendInviteEmail', { method: 'POST', body: payload }),
